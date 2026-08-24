@@ -107,14 +107,14 @@ APP_DIR="${HOME}/.local/share/applications"
 
 mkdir -p "$BIN_DIR" "$ICON_DIR" "$APP_DIR"
 
-install -m 755 "$HERE/{name}" "$BIN_DIR/{name}"
+install -m 755 "$HERE/@@NAME@@" "$BIN_DIR/@@NAME@@"
 install -m 644 "$HERE/sci-hub.png" "$ICON_DIR/sci-hub.png"
-sed "s|@BIN@|$BIN_DIR/{name}|" "$HERE/{name}.desktop" > "$APP_DIR/{name}.desktop"
+sed "s|@BIN@|$BIN_DIR/@@NAME@@|" "$HERE/@@NAME@@.desktop" > "$APP_DIR/@@NAME@@.desktop"
 
 update-desktop-database "$APP_DIR" 2>/dev/null || true
 
 echo "安装完成。"
-echo "  命令行: $BIN_DIR/{name}"
+echo "  命令行: $BIN_DIR/@@NAME@@"
 echo "  应用菜单: Sci-Hub Downloader（如未刷新，注销后重登）"
 """
 
@@ -137,7 +137,9 @@ def _package_linux() -> int:
 
     (pkg / f"{NAME}.desktop").write_text(_DESKTOP_TEMPLATE, encoding="utf-8")
     install = pkg / "install.sh"
-    install.write_text(_INSTALL_TEMPLATE.format(name=NAME), encoding="utf-8")
+    # 用 replace 而非 str.format：install.sh 里含 ${HOME}、${BASH_SOURCE[0]}
+    # 等 shell 变量展开，format 会把它们的 { } 误当成占位符。
+    install.write_text(_INSTALL_TEMPLATE.replace("@@NAME@@", NAME), encoding="utf-8")
     install.chmod(0o755)
 
     tarball = ROOT / "dist" / f"{NAME}-{__version__}-linux-{_arch()}.tar.gz"
