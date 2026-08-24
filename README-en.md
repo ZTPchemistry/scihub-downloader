@@ -1,6 +1,6 @@
 # Sci-Hub Downloader
 
-[English](README-en.md) | [中文](README-zh.md)
+[English](README-en.md) | [中文](README.md)
 
 A cross-platform (Windows / Linux) batch literature downloader with both a GUI and a CLI, **zero third-party runtime dependencies** — clone it and run `python main.py`.
 

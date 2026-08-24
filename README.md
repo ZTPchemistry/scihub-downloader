@@ -1,6 +1,6 @@
 # Sci-Hub Downloader
 
-[中文](README-zh.md) | [English](README-en.md)
+[中文](README.md) | [English](README-en.md)
 
 跨平台（Windows / Linux）的文献批量下载器，带图形界面与命令行两种入口，**零第三方运行时依赖**——克隆下来 `python main.py` 即可运行。
 
