@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+.venv/
+venv/
+env/
+
+# 打包产物与临时文件
+*.part
+*.log
+
+# 下载输出
+papers/
+downloads/
+
+# 用户本地配置缓存
+metadata_cache.json
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

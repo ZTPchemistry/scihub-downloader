@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scihub-downloader"
+dynamic = ["version"]
+description = "跨平台 Sci-Hub 文献批量下载器（GUI + CLI），零第三方依赖"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Sci-Hub Downloader contributors" }]
+keywords = ["sci-hub", "doi", "pdf", "downloader", "literature"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Education",
+]
+dependencies = []
+
+[project.optional-dependencies]
+build = ["pyinstaller"]
+
+[project.scripts]
+scihub-dl = "scihub_dl.cli:main"
+
+[project.gui-scripts]
+scihub-dl-gui = "scihub_dl.gui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["scihub_dl*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "scihub_dl.__version__" }
+
+[tool.setuptools.package-data]
+"scihub_dl" = ["assets/*.ico", "assets/*.png"]
