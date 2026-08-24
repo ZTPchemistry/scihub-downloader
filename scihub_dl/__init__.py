@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 __all__ = ["__version__", "resource_path", "APP_NAME"]
 
 APP_NAME = "SciHubDownloader"

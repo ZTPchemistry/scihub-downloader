@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import __version__
+from .i18n import tr
 from .metadata import MetadataCache, crossref_user_agent, crossref_works
 from .mirrors import DEFAULT_MIRRORS, MirrorPool
 from .models import (
@@ -274,11 +275,11 @@ class BatchEngine:
                 )
             )
 
-        row(STATUS_QUEUED if not self._needs_metadata(paper) else STATUS_METADATA, "准备")
+        row(STATUS_QUEUED if not self._needs_metadata(paper) else STATUS_METADATA, tr("msg_prepare"))
 
         # 1) 需要时补全元数据
         if self._needs_metadata(paper):
-            row(STATUS_METADATA, "查询 CrossRef 标题…")
+            row(STATUS_METADATA, tr("msg_query_meta"))
             try:
                 meta = crossref_works(
                     paper.doi,
@@ -299,11 +300,11 @@ class BatchEngine:
 
         # 3) 已存在且有效 → 跳过
         if self.skip_existing and target.exists() and target.stat().st_size > MIN_VALID_BYTES:
-            row(STATUS_SKIPPED, "已存在，跳过", filename)
+            row(STATUS_SKIPPED, tr("msg_exists"), filename)
             return STATUS_SKIPPED
 
         # 4) 找 PDF
-        row(STATUS_SEARCHING, "搜索 Sci-Hub…")
+        row(STATUS_SEARCHING, tr("msg_search"))
         resolved = resolve_pdf_url(
             paper.doi,
             pool=self.pool,
@@ -312,23 +313,23 @@ class BatchEngine:
             cancel_event=self.cancel_event,
         )
         if self.cancel_event.is_set() or resolved.reason == "cancelled":
-            row(STATUS_CANCELLED, "已取消", filename)
+            row(STATUS_CANCELLED, tr("cancelled"), filename)
             return STATUS_CANCELLED
         if resolved.reason == "not_found":
-            row(STATUS_NOT_FOUND, "Sci-Hub 未收录", filename)
+            row(STATUS_NOT_FOUND, tr("msg_not_found"), filename)
             return STATUS_NOT_FOUND
         if resolved.reason == "captcha":
-            row(STATUS_CAPTCHA, "被验证码拦截", filename)
+            row(STATUS_CAPTCHA, tr("msg_captcha"), filename)
             return STATUS_CAPTCHA
         if resolved.reason == "network_error":
-            row(STATUS_NETWORK_ERROR, "网络连接失败", filename)
+            row(STATUS_NETWORK_ERROR, tr("msg_network"), filename)
             return STATUS_NETWORK_ERROR
         if not resolved.ok:
-            row(STATUS_NO_PDF, "未找到 PDF 链接", filename)
+            row(STATUS_NO_PDF, tr("msg_no_pdf"), filename)
             return STATUS_NO_PDF
 
         # 5) 下载
-        row(STATUS_DOWNLOADING, "下载中…", filename)
+        row(STATUS_DOWNLOADING, tr("msg_downloading"), filename)
         self.outdir.mkdir(parents=True, exist_ok=True)
         result = download_pdf(
             resolved.pdf_url,
@@ -337,19 +338,19 @@ class BatchEngine:
             cancel_event=self.cancel_event,
         )
         if result.cancelled:
-            row(STATUS_CANCELLED, "已取消", filename)
+            row(STATUS_CANCELLED, tr("cancelled"), filename)
             return STATUS_CANCELLED
         if not result.ok:
             if result.reason == "bad_pdf":
-                row(STATUS_BAD_PDF, result.error or "内容不是有效 PDF", filename)
+                row(STATUS_BAD_PDF, result.error or tr("msg_bad_pdf"), filename)
                 return STATUS_BAD_PDF
             if result.reason == "network_error":
-                row(STATUS_NETWORK_ERROR, result.error or "下载连接失败", filename)
+                row(STATUS_NETWORK_ERROR, result.error or tr("msg_download_fail"), filename)
                 return STATUS_NETWORK_ERROR
-            row(STATUS_FAILED, result.error or "下载失败", filename)
+            row(STATUS_FAILED, result.error or tr("msg_download_error"), filename)
             return STATUS_FAILED
 
-        row(STATUS_SAVED, f"完成 {result.size // 1024} KB", filename)
+        row(STATUS_SAVED, tr("msg_saved", kb=result.size // 1024), filename)
         return STATUS_SAVED
 
     # —— 对外 ——

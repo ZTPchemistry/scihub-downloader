@@ -30,6 +30,7 @@ class Config:
     last_good_mirror: str | None = None
     crossref_mailto: str = ""
     window_geometry: str = ""
+    lang: str = "zh"
 
 
 def config_dir() -> Path:
@@ -61,6 +62,8 @@ def load_config() -> Config:
         cfg.concurrency = 2
     if cfg.naming_mode not in ("title", "doi", "year", "author", "custom"):
         cfg.naming_mode = "title"
+    if cfg.lang not in ("zh", "en"):
+        cfg.lang = "zh"
     return cfg
 
 

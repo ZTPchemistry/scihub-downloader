@@ -1,5 +1,7 @@
 # Sci-Hub Downloader
 
+[中文](README-zh.md) | [English](README-en.md)
+
 跨平台（Windows / Linux）的文献批量下载器，带图形界面与命令行两种入口，**零第三方运行时依赖**——克隆下来 `python main.py` 即可运行。
 
 根据 DOI 从 Sci-Hub 下载论文 PDF，自动按标题（或 DOI / 作者-年份-标题等模板）命名，支持从 `txt` / `md` / `json` 文件批量导入。
@@ -14,6 +16,7 @@
 - 🔎 **元数据补全**：纯 DOI 时自动调 CrossRef 查标题/作者/年份，失败自动回退
 - 🛡 **稳健下载**：多镜像自动择优、流式写入 + `%PDF` 文件头校验、去重与同名冲突处理、跨平台安全文件名（字节级截断 + Windows 保留名）
 - ⚡ **零依赖**：只用 Python 标准库（`tkinter` + `urllib`）
+- 🌐 **中英双语**：界面可在中文 / 英文间切换（GUI 菜单或 CLI `--lang`）
 
 ## 📦 安装
 
@@ -52,6 +55,8 @@ python main.py
 3. 选择保存目录与命名方式；
 4. 点「开始下载」，随时可「停止」。
 
+通过「语言」菜单可在中文与英文界面间切换。
+
 ## ⌨️ 命令行
 
 ```
@@ -76,6 +81,7 @@ python main.py --batch batch.json --dry-run
 | `--no-metadata` | 不查 CrossRef 补全标题 |
 | `--plain` | md 文件按纯文本逐行解析 |
 | `--dry-run` | 仅预览文件名，不下载 |
+| `--lang` | 界面语言（`zh` / `en`） |
 
 ### 命名模板
 
@@ -154,6 +160,7 @@ scihub_dl/
   parsers.py     txt/md/json 导入解析
   downloader.py  下载引擎（UI 无关）
   config.py      配置持久化
+  i18n.py        中英文文案（双语切换）
   cli.py         命令行入口
  tests/           测试用脚本
 ```
@@ -163,6 +170,7 @@ scihub_dl/
     v1.0.0  初始版本；
     v1.0.1  修复导入DOI后的界面显示问题，增加下载失败原因提示；
     v1.0.2  修复linux系统下打包失败的问题；
+    v1.1.0  新增中英文切换功能；
 
 ## 📄 License
 

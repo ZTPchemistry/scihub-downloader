@@ -1,7 +1,8 @@
 """命令行入口。这里（以及 GUI）是仅有的两处允许 print 的地方。
 
 保留原脚本的 ``--doi/--title/--batch/--markdown/--outdir/--dry-run``，
-新增 ``--file/--naming/--template/--concurrency/--plain/--no-metadata``。
+新增 ``--file/--naming/--template/--concurrency/--plain/--no-metadata``，
+以及 ``--lang`` 切换中英文。
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from .config import load_config, save_config
 from .downloader import BatchEngine
+from .i18n import LANGS, get_lang, set_lang, tr
 from .metadata import MetadataCache
 from .models import (
     STATUS_BAD_PDF,
@@ -46,38 +48,39 @@ _EMOJI = {
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="scihub-dl",
-        description="Sci-Hub 文献下载器 — 根据 DOI 下载论文 PDF",
+        description=tr("cli_description"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "示例:\n"
+            tr("cli_epilog_examples") + "\n"
             "  %(prog)s --doi 10.1063/1.1674820 --title \"WCA Theory\" --outdir ./papers\n"
             "  %(prog)s --file dois.txt --outdir ./papers\n"
-            "  %(prog)s --file 文献汇总.md --naming author --outdir ./papers\n"
+            "  %(prog)s --file refs.md --naming author --outdir ./papers\n"
             "  %(prog)s --batch batch.json --dry-run\n"
             "\n"
-            "命名方式: " + ", ".join(TEMPLATES) + ", custom（配合 --template）"
+            + tr("cli_epilog_naming") + ": " + ", ".join(TEMPLATES) + ", custom (--template)"
         ),
     )
     src = p.add_mutually_exclusive_group(required=True)
-    src.add_argument("--doi", type=str, help="单个 DOI")
-    src.add_argument("--batch", type=str, help="JSON 批处理文件路径")
-    src.add_argument("--markdown", type=str, help="从 Markdown 文献汇总提取 DOI")
-    src.add_argument("--file", type=str, help="txt/md/json 导入文件（自动识别格式）")
+    src.add_argument("--doi", type=str, help=tr("cli_doi"))
+    src.add_argument("--batch", type=str, help=tr("cli_batch"))
+    src.add_argument("--markdown", type=str, help=tr("cli_markdown"))
+    src.add_argument("--file", type=str, help=tr("cli_file"))
 
-    p.add_argument("--title", type=str, default="", help="文献标题（与 --doi 配合）")
-    p.add_argument("--outdir", type=str, default="./papers", help="输出目录（默认 ./papers）")
+    p.add_argument("--title", type=str, default="", help=tr("cli_title"))
+    p.add_argument("--outdir", type=str, default="./papers", help=tr("cli_outdir"))
     p.add_argument(
         "--naming",
         type=str,
         default=None,
         choices=list(TEMPLATES) + ["custom"],
-        help="命名方式（默认沿用上次或 title）",
+        help=tr("cli_naming"),
     )
-    p.add_argument("--template", type=str, default="", help="--naming custom 时使用")
-    p.add_argument("--concurrency", type=int, default=None, help="并发数 1-8（默认 2）")
-    p.add_argument("--plain", action="store_true", help="md 文件按纯文本逐行解析")
-    p.add_argument("--no-metadata", action="store_true", help="不查 CrossRef 补全标题")
-    p.add_argument("--dry-run", action="store_true", help="仅预览，不实际下载")
+    p.add_argument("--template", type=str, default="", help=tr("cli_template"))
+    p.add_argument("--concurrency", type=int, default=None, help=tr("cli_concurrency"))
+    p.add_argument("--plain", action="store_true", help=tr("cli_plain"))
+    p.add_argument("--no-metadata", action="store_true", help=tr("cli_no_metadata"))
+    p.add_argument("--dry-run", action="store_true", help=tr("cli_dry_run"))
+    p.add_argument("--lang", type=str, default=None, choices=list(LANGS), help=tr("cli_lang"))
     return p
 
 
@@ -86,7 +89,7 @@ def _collect(args) -> list[Paper]:
         return [Paper(doi=args.doi, title=args.title or None)]
     path = Path(args.file or args.markdown or args.batch)
     if not path.exists():
-        print(f"❌ 文件不存在: {path}")
+        print(f"❌ {tr('cli_file_missing', path=path)}")
         return []
     return parse_file(path, plain=args.plain)
 
@@ -103,15 +106,32 @@ def _print_event(ev: Event, cfg) -> None:
         print(f"  {icon} {title}{extra}")
     elif ev.type == "done":
         s = ev.summary
+        summary = tr(
+            "cli_summary",
+            saved=s.saved,
+            skipped=s.skipped,
+            not_found=s.not_found,
+            failed=s.failed,
+            total=s.total,
+        )
         print("=" * 60)
-        print(f"📊 完成: 成功 {s.saved} | 跳过 {s.skipped} | "
-              f"未收录 {s.not_found} | 失败 {s.failed} | 总计 {s.total}")
+        print(f"📊 {summary}")
         if s.cancelled:
-            print("⏹ 已取消")
+            print(f"⏹ {tr('cancelled')}")
         if s.failures:
             for doi, reason in s.failures:
                 print(f"  ❌ {doi}: {reason}")
         print("=" * 60)
+
+
+def _lang_from_argv(argv: list[str] | None) -> str | None:
+    args = sys.argv[1:] if argv is None else list(argv)
+    for i, a in enumerate(args):
+        if a == "--lang" and i + 1 < len(args):
+            return args[i + 1]
+        if a.startswith("--lang="):
+            return a.split("=", 1)[1]
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -128,12 +148,16 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:  # noqa: BLE001
             pass
 
-    args = build_parser().parse_args(argv)
     cfg = load_config()
+    # 先确定语言再构建 parser，这样 --help 文案也能跟随语言。
+    lang = _lang_from_argv(argv) or cfg.lang or "zh"
+    set_lang(lang)
+
+    args = build_parser().parse_args(argv)
 
     papers = _collect(args)
     if not papers:
-        print("❌ 未找到任何 DOI")
+        print(f"❌ {tr('cli_no_doi')}")
         return 1
 
     naming = args.naming or cfg.naming_mode or "title"
@@ -144,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         from .sanitize import sanitize_filename
 
         print(f"\n{'=' * 60}")
-        print(f"🏷 预览（共 {len(papers)} 篇，命名方式: {naming}）")
+        print(f"🏷 {tr('cli_preview_header', n=len(papers), naming=naming)}")
         print(f"{'=' * 60}")
         for i, p in enumerate(papers, 1):
             stem = build_filename(p, naming, args.template)
@@ -167,8 +191,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     print(f"\n{'=' * 60}")
-    print(f"📚 Sci-Hub 文献下载")
-    print(f"   总计: {len(papers)} 篇 | 输出: {args.outdir} | 命名: {naming}")
+    print(f"📚 {tr('cli_banner_title')}")
+    print(f"   {tr('cli_banner_meta', n=len(papers), outdir=args.outdir, naming=naming)}")
     print(f"{'=' * 60}\n")
 
     summary = engine.run(papers, on_event=lambda ev: _print_event(ev, cfg))
@@ -177,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg.last_outdir = args.outdir
     cfg.naming_mode = naming
     cfg.concurrency = concurrency
+    cfg.lang = get_lang()
     cfg.last_good_mirror = engine.pool.last_good()
     save_config(cfg)
 
