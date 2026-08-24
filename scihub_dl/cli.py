@@ -15,9 +15,13 @@ from .config import load_config, save_config
 from .downloader import BatchEngine
 from .metadata import MetadataCache
 from .models import (
+    STATUS_BAD_PDF,
     STATUS_CANCELLED,
+    STATUS_CAPTCHA,
     STATUS_FAILED,
+    STATUS_NETWORK_ERROR,
     STATUS_NOT_FOUND,
+    STATUS_NO_PDF,
     STATUS_SAVED,
     STATUS_SKIPPED,
     Event,
@@ -31,6 +35,10 @@ _EMOJI = {
     STATUS_SKIPPED: "⏭",
     STATUS_FAILED: "❌",
     STATUS_NOT_FOUND: "🔍",
+    STATUS_NETWORK_ERROR: "🌐",
+    STATUS_CAPTCHA: "🛡",
+    STATUS_NO_PDF: "📄",
+    STATUS_BAD_PDF: "📄",
     STATUS_CANCELLED: "⏹",
 }
 

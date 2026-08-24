@@ -23,11 +23,15 @@ from . import __version__
 from .metadata import MetadataCache, crossref_user_agent, crossref_works
 from .mirrors import DEFAULT_MIRRORS, MirrorPool
 from .models import (
+    STATUS_BAD_PDF,
     STATUS_CANCELLED,
+    STATUS_CAPTCHA,
     STATUS_DOWNLOADING,
     STATUS_FAILED,
     STATUS_METADATA,
+    STATUS_NETWORK_ERROR,
     STATUS_NOT_FOUND,
+    STATUS_NO_PDF,
     STATUS_QUEUED,
     STATUS_SAVED,
     STATUS_SEARCHING,
@@ -106,7 +110,11 @@ def resolve_pdf_url(
     limiter: RateLimiter,
     cancel_event: threading.Event,
 ) -> ResolveResult:
-    """在镜像里找 PDF 链接。一轮镜像走完即止。"""
+    """在镜像里找 PDF 链接。一轮镜像走完即止，失败原因尽量精确。"""
+    saw_captcha = False
+    saw_network = False
+    saw_no_pdf = False
+
     for mirror in pool.order():
         if cancel_event.is_set():
             return ResolveResult(reason="cancelled")
@@ -114,12 +122,13 @@ def resolve_pdf_url(
         url = f"{mirror}/{doi.strip()}"
         try:
             html = session.get(url)
-        except RequestError as e:
+        except RequestError:
             pool.mark_fail(mirror)
-            # 网络错误继续尝试下一个；真正的资源级错误区分不了就都继续
+            saw_network = True
             continue
         except Exception:  # noqa: BLE001
             pool.mark_fail(mirror)
+            saw_network = True
             continue
 
         pdf_url = extract_pdf_url(html, mirror)
@@ -128,15 +137,24 @@ def resolve_pdf_url(
             return ResolveResult(pdf_url=pdf_url, mirror=mirror, reason="ok")
 
         low = html.lower()
-        if "captcha" in low:
-            pool.mark_fail(mirror)
-            continue
-        # 页面正常但没找到 PDF——可能是「未找到」或版式变了。
+        # 明确「未收录」是确定性信号，立即返回。
         if "article not found" in low or "не найдена" in low or "not found" in low:
             return ResolveResult(reason="not_found")
+        if "captcha" in low:
+            pool.mark_fail(mirror)
+            saw_captcha = True
+            continue
         pool.mark_fail(mirror)
+        saw_no_pdf = True
 
-    return ResolveResult(reason="exhausted")
+    # 按可操作性排序：验证码 > 网络 > 无 PDF 链接。
+    if saw_captcha:
+        return ResolveResult(reason="captcha")
+    if saw_network:
+        return ResolveResult(reason="network_error")
+    if saw_no_pdf:
+        return ResolveResult(reason="no_pdf")
+    return ResolveResult(reason="network_error")
 
 
 def download_pdf(
@@ -162,7 +180,7 @@ def download_pdf(
                     break
                 # 首块即校验文件头，避免把 HTML 报错页当成 PDF 存下来。
                 if written == 0 and not chunk.startswith(PDF_MAGIC):
-                    return DownloadResult(error="下载内容不是有效 PDF")
+                    return DownloadResult(reason="bad_pdf", error="下载内容不是有效 PDF")
                 f.write(chunk)
                 written += len(chunk)
                 if on_progress:
@@ -172,9 +190,9 @@ def download_pdf(
         os.replace(part, path)
         return DownloadResult(ok=True, path=path, size=written)
     except RequestError as e:
-        return DownloadResult(error=str(e))
+        return DownloadResult(reason="network_error", error=str(e))
     except Exception as e:  # noqa: BLE001
-        return DownloadResult(error=str(e))
+        return DownloadResult(reason="error", error=str(e))
     finally:
         if part.exists():
             try:
@@ -299,9 +317,15 @@ class BatchEngine:
         if resolved.reason == "not_found":
             row(STATUS_NOT_FOUND, "Sci-Hub 未收录", filename)
             return STATUS_NOT_FOUND
+        if resolved.reason == "captcha":
+            row(STATUS_CAPTCHA, "被验证码拦截", filename)
+            return STATUS_CAPTCHA
+        if resolved.reason == "network_error":
+            row(STATUS_NETWORK_ERROR, "网络连接失败", filename)
+            return STATUS_NETWORK_ERROR
         if not resolved.ok:
-            row(STATUS_FAILED, "未找到 PDF 链接", filename)
-            return STATUS_FAILED
+            row(STATUS_NO_PDF, "未找到 PDF 链接", filename)
+            return STATUS_NO_PDF
 
         # 5) 下载
         row(STATUS_DOWNLOADING, "下载中…", filename)
@@ -316,6 +340,12 @@ class BatchEngine:
             row(STATUS_CANCELLED, "已取消", filename)
             return STATUS_CANCELLED
         if not result.ok:
+            if result.reason == "bad_pdf":
+                row(STATUS_BAD_PDF, result.error or "内容不是有效 PDF", filename)
+                return STATUS_BAD_PDF
+            if result.reason == "network_error":
+                row(STATUS_NETWORK_ERROR, result.error or "下载连接失败", filename)
+                return STATUS_NETWORK_ERROR
             row(STATUS_FAILED, result.error or "下载失败", filename)
             return STATUS_FAILED
 

@@ -3,8 +3,10 @@
 import threading
 import unittest
 
-from scihub_dl.downloader import BatchEngine, extract_pdf_url
-from scihub_dl.models import Paper
+from scihub_dl.downloader import BatchEngine, extract_pdf_url, resolve_pdf_url
+from scihub_dl.mirrors import MirrorPool
+from scihub_dl.models import Paper, STATUS_NETWORK_ERROR
+from scihub_dl.net import RateLimiter, RequestError
 
 
 class TestExtractPdfUrl(unittest.TestCase):
@@ -92,6 +94,70 @@ class TestBatchEngine(unittest.TestCase):
         self.assertEqual(files[0].name, "10.1063_1.1674820.pdf")
         # done 事件一定发出
         self.assertTrue(any(e.type == "done" for e in events))
+
+
+class _FailureSession:
+    """可配置行为的假 session：返回指定 HTML 或抛 RequestError。"""
+
+    def __init__(self, html: str = "", exc: RequestError | None = None):
+        self.html = html
+        self.exc = exc
+
+    def get(self, url, *, strict=False, timeout=None):
+        if self.exc is not None:
+            raise self.exc
+        return self.html
+
+    def open(self, url, *, strict=False, timeout=None):
+        if self.exc is not None:
+            raise self.exc
+        return None  # 失败场景不会走到这里
+
+
+def _resolve(session) -> "ResolveResult":
+    from scihub_dl.downloader import resolve_pdf_url
+
+    return resolve_pdf_url(
+        "10.1/x",
+        pool=MirrorPool(["https://sci-hub.test"]),
+        session=session,
+        limiter=RateLimiter(interval=0.0),
+        cancel_event=threading.Event(),
+    )
+
+
+class TestFailureReasons(unittest.TestCase):
+    def test_not_found(self):
+        r = _resolve(_FailureSession(html="<html>article not found</html>"))
+        self.assertEqual(r.reason, "not_found")
+
+    def test_captcha(self):
+        r = _resolve(_FailureSession(html="<html>captcha required</html>"))
+        self.assertEqual(r.reason, "captcha")
+
+    def test_network_error(self):
+        r = _resolve(_FailureSession(exc=RequestError("timeout")))
+        self.assertEqual(r.reason, "network_error")
+
+    def test_no_pdf(self):
+        r = _resolve(_FailureSession(html="<html>nothing useful</html>"))
+        self.assertEqual(r.reason, "no_pdf")
+
+    def test_process_maps_network_error(self):
+        import tempfile
+        from pathlib import Path
+
+        engine = BatchEngine(
+            outdir=str(Path(tempfile.mkdtemp())),
+            naming_mode="doi",
+            session=_FailureSession(exc=RequestError("timeout")),
+            use_metadata=False,
+            concurrency=1,
+        )
+        statuses: list[str] = []
+        status = engine._process(Paper(doi="10.1/x"), 0, lambda ev: statuses.append(ev.status))
+        self.assertEqual(status, STATUS_NETWORK_ERROR)
+        self.assertIn(STATUS_NETWORK_ERROR, statuses)
 
 
 if __name__ == "__main__":

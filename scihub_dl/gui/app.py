@@ -19,10 +19,10 @@ from ..config import Config, load_config, save_config
 from ..doi import normalize_doi
 from ..downloader import BatchEngine
 from ..metadata import MetadataCache
-from ..models import Event, Paper, STATUS_QUEUED
+from ..models import Event, Paper, STATUS_PENDING, STATUS_QUEUED
 from ..naming import PRESET_LABELS, TEMPLATES, build_filename
 from ..parsers import parse_file
-from .theme import STATUS_COLORS, apply_style, enable_high_dpi
+from .theme import STATUS_COLORS, STATUS_LABELS, apply_style, enable_high_dpi
 
 COLS = ("index", "doi", "title", "status", "file")
 
@@ -186,6 +186,24 @@ class App(tk.Tk):
     def _refresh_count(self) -> None:
         self.count_lbl.configure(text=f"共 {len(self.papers)} 条")
 
+    def _insert_row(self, paper: Paper) -> None:
+        """把一条记录插入表格，状态为「等待确认」。"""
+        index = len(self.papers) - 1  # 调用方已在 append 之后
+        iid = self.tree.insert(
+            "",
+            "end",
+            iid=str(index),
+            values=(
+                index + 1,
+                paper.doi,
+                paper.title or "—",
+                STATUS_LABELS[STATUS_PENDING],
+                "",
+            ),
+        )
+        self._row_iid[index] = iid
+        self.tree.item(iid, tags=(STATUS_PENDING,))
+
     def _add_doi(self) -> None:
         raw = self.doi_var.get().strip()
         if not raw:
@@ -198,6 +216,7 @@ class App(tk.Tk):
             self.doi_var.set("")
             return
         self.papers.append(Paper(doi=doi))
+        self._insert_row(self.papers[-1])
         self.doi_var.set("")
         self._refresh_count()
 
@@ -224,6 +243,7 @@ class App(tk.Tk):
         for p in papers:
             if p.doi not in existing:
                 self.papers.append(p)
+                self._insert_row(p)
                 existing.add(p.doi)
                 added += 1
         self._refresh_count()
@@ -239,23 +259,6 @@ class App(tk.Tk):
 
     # ── 运行控制 ──────────────────────────────
 
-    def _collect_papers(self) -> list[Paper]:
-        return self.papers
-
-    def _populate_tree(self) -> None:
-        for iid in self.tree.get_children():
-            self.tree.delete(iid)
-        self._row_iid.clear()
-        for i, p in enumerate(self.papers):
-            iid = self.tree.insert(
-                "",
-                "end",
-                iid=str(i),
-                values=(i + 1, p.doi, p.title or "—", STATUS_QUEUED, ""),
-            )
-            self._row_iid[i] = iid
-            self.tree.item(iid, tags=(STATUS_QUEUED,))
-
     def _start(self) -> None:
         if not self.papers:
             messagebox.showinfo("提示", "请先添加或导入 DOI")
@@ -265,7 +268,10 @@ class App(tk.Tk):
             return
 
         self.cancel.clear()
-        self._populate_tree()
+        # 把「等待确认」的行改为「排队中」，引擎随后逐行更新真实状态。
+        for iid in self._row_iid.values():
+            self.tree.set(iid, "status", STATUS_LABELS[STATUS_QUEUED])
+            self.tree.item(iid, tags=(STATUS_QUEUED,))
         self.progress.configure(value=0, maximum=len(self.papers))
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
@@ -325,7 +331,7 @@ class App(tk.Tk):
                 if ev.title:
                     self.tree.set(iid, "title", ev.title)
                 if ev.status:
-                    self.tree.set(iid, "status", ev.status)
+                    self.tree.set(iid, "status", STATUS_LABELS.get(ev.status, ev.status))
                     self.tree.item(iid, tags=(ev.status,))
                 if ev.filename:
                     self.tree.set(iid, "file", ev.filename)

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # 下载状态机。GUI 用它做行着色，CLI 用它选图标。
+STATUS_PENDING = "pending"  # 已添加/导入、尚未开始下载（等待确认）
 STATUS_QUEUED = "queued"
 STATUS_METADATA = "metadata"
 STATUS_SEARCHING = "searching"
@@ -20,9 +21,25 @@ STATUS_FAILED = "failed"
 STATUS_NOT_FOUND = "not_found"
 STATUS_CANCELLED = "cancelled"
 
+# 细分的失败原因（都是失败终态）。
+STATUS_NETWORK_ERROR = "network_error"  # 连接超时/DNS/TLS/HTTP 错误
+STATUS_CAPTCHA = "captcha"              # 被 Sci-Hub 反爬验证码拦截
+STATUS_NO_PDF = "no_pdf"                # 页面正常但解析不出 PDF 链接
+STATUS_BAD_PDF = "bad_pdf"              # 下载内容不是有效 PDF
+
 #: 终态——引擎不会在这些状态之后再发同一行的事件。
 TERMINAL_STATUSES = frozenset(
-    {STATUS_SAVED, STATUS_SKIPPED, STATUS_FAILED, STATUS_NOT_FOUND, STATUS_CANCELLED}
+    {
+        STATUS_SAVED,
+        STATUS_SKIPPED,
+        STATUS_FAILED,
+        STATUS_NOT_FOUND,
+        STATUS_CANCELLED,
+        STATUS_NETWORK_ERROR,
+        STATUS_CAPTCHA,
+        STATUS_NO_PDF,
+        STATUS_BAD_PDF,
+    }
 )
 
 
@@ -84,6 +101,7 @@ class DownloadResult:
     size: int = 0
     cancelled: bool = False
     error: str = ""
+    reason: str = ""  # ok | bad_pdf | network_error | error
 
 
 @dataclass
