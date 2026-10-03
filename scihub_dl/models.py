@@ -117,3 +117,54 @@ class BatchSummary:
     @property
     def done(self) -> int:
         return self.saved + self.skipped + self.failed + self.not_found
+
+
+# ── 标题检索 ──────────────────────────────────────────
+
+#: Sci-Hub 收录探测状态。这是检索列表里的**提示**，不是下载结果——
+#: 探测只是提前告诉用户「能不能下」，真正的下载仍由引擎独立解析一次。
+AVAIL_UNKNOWN = "unknown"      # 未探测 / 探测失败（验证码、网络、无 PDF 链接）
+AVAIL_CHECKING = "checking"    # 探测进行中
+AVAIL_AVAILABLE = "available"  # 已在镜像上解析出 PDF 链接
+AVAIL_NOT_FOUND = "not_found"  # 镜像明确回复「未收录」
+
+
+@dataclass
+class SearchResult:
+    """按标题检索到的一条候选文献（由 :mod:`scihub_dl.search` 产出）。
+
+    ``doi`` 已经在解析阶段归一化，可以直接与 :class:`Paper` 去重；
+    为空表示该条目没有 DOI（少数书籍章节/预印本），无法进入下载链路。
+    """
+
+    doi: str = ""
+    title: str = ""
+    author: str = ""
+    year: str = ""
+    journal: str = ""
+    url: str = ""
+    avail: str = AVAIL_UNKNOWN
+    avail_reason: str = ""
+
+    @property
+    def selectable(self) -> bool:
+        """能否被勾选加入任务列表。
+
+        没有 DOI（下载链路是 DOI 驱动的）或已确认 Sci-Hub 未收录的都不可选；
+        「未探测 / 探测失败」仍可选——探测只是提示，不该替用户下结论。
+        """
+        return bool(self.doi) and self.avail != AVAIL_NOT_FOUND
+
+    @property
+    def doi_url(self) -> str:
+        return f"https://doi.org/{self.doi}" if self.doi else ""
+
+    def to_paper(self) -> Paper:
+        """转成任务列表里的记录：标题/作者/年份/期刊都已就位，无需再查 CrossRef。"""
+        return Paper(
+            doi=self.doi,
+            title=self.title or None,
+            author=self.author,
+            year=self.year,
+            journal=self.journal,
+        )

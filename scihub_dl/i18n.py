@@ -12,6 +12,10 @@ GUI）不再各自硬编码中文。``theme.STATUS_LABELS`` 与 ``naming.PRESET_
 from __future__ import annotations
 
 from .models import (
+    AVAIL_AVAILABLE,
+    AVAIL_CHECKING,
+    AVAIL_NOT_FOUND,
+    AVAIL_UNKNOWN,
     STATUS_BAD_PDF,
     STATUS_CANCELLED,
     STATUS_CAPTCHA,
@@ -36,6 +40,8 @@ __all__ = [
     "tr",
     "status_label",
     "naming_labels",
+    "search_avail_label",
+    "search_sort_labels",
 ]
 
 #: 支持的语言代码，顺序即语言菜单里的显示顺序。
@@ -71,6 +77,20 @@ _NAMING_KEYS: dict[str, str] = {
     "year": "naming_year",
     "author": "naming_author",
     "custom": "naming_custom",
+}
+
+# ── 检索排序 → 翻译 key ──────────────────────────────
+_SORT_KEYS: dict[str, str] = {
+    "relevance": "sort_relevance",
+    "published": "sort_published",
+}
+
+# ── Sci-Hub 收录状态 → 翻译 key ──────────────────────
+_AVAIL_KEYS: dict[str, str] = {
+    AVAIL_UNKNOWN: "avail_unknown",
+    AVAIL_CHECKING: "avail_checking",
+    AVAIL_AVAILABLE: "avail_available",
+    AVAIL_NOT_FOUND: "avail_not_found",
 }
 
 # ── 翻译表 ────────────────────────────────────────
@@ -153,6 +173,45 @@ _STR: dict[str, dict[str, str]] = {
         "msg_download_fail": "下载连接失败",
         "msg_download_error": "下载失败",
         "msg_saved": "完成 {kb} KB",
+        # 检索（搜索论文页）
+        "tab_tasks": "任务列表",
+        "tab_search": "搜索论文",
+        "search_label": "标题 / 关键词:",
+        "search_button": "搜索文献",
+        "search_years": "年份:",
+        "search_sort": "排序:",
+        "sort_relevance": "相关度",
+        "sort_published": "最新发表",
+        "search_rows": "条数:",
+        "col_sel": "选择",
+        "col_author": "作者",
+        "col_year": "年份",
+        "col_journal": "期刊",
+        "col_avail": "Sci-Hub",
+        "col_note": "备注",
+        "select_all": "全选可下载",
+        "select_none": "取消全选",
+        "add_selected": "添加到任务列表",
+        "open_doi": "打开 DOI",
+        "search_hint": "双击结果行可用浏览器打开 DOI 页面",
+        "search_need_query": "请输入标题或关键词",
+        "search_searching": "正在检索 CrossRef…",
+        "search_hits": "共 {n} 条结果，正在检查 Sci-Hub 收录情况…",
+        "search_done": "检索完成：共 {n} 条结果",
+        "search_stopped": "已停止检索",
+        "search_empty": "没有找到匹配的文献",
+        "search_failed_title": "检索失败",
+        "search_failed": "检索失败: {e}",
+        "search_none_selected": "请先勾选要下载的文献",
+        "search_added": "已添加 {added} 条到任务列表（忽略 {skipped} 条重复）",
+        "search_note_in_list": "已在列表",
+        "search_note_no_doi": "无 DOI",
+        "search_row_blocked": "该条不可选：{title}",
+        "search_no_doi_open": "该条没有 DOI，无法打开",
+        "avail_unknown": "未确定",
+        "avail_checking": "检查中…",
+        "avail_available": "可下载",
+        "avail_not_found": "未收录",
         # CLI
         "cli_description": "Sci-Hub 文献下载器 — 根据 DOI 下载论文 PDF",
         "cli_epilog_examples": "示例:",
@@ -170,6 +229,18 @@ _STR: dict[str, dict[str, str]] = {
         "cli_no_metadata": "不查 CrossRef 补全标题",
         "cli_dry_run": "仅预览，不实际下载",
         "cli_lang": "界面语言（zh / en）",
+        "cli_search": "按标题/关键词检索 CrossRef（用 --pick 选择要下载的条目）",
+        "cli_search_limit": "检索返回条数（默认 20，最大 100）",
+        "cli_pick": "从检索结果中挑选序号下载，如 1,3 或 1-3",
+        "cli_year_from": "只检索该年份及以后（如 2015）",
+        "cli_year_to": "只检索该年份及以前（如 2024）",
+        "cli_sort": "检索排序（默认 relevance）",
+        "cli_search_header": "检索「{query}」：共 {n} 条候选",
+        "cli_search_hint": "用 --pick 选择要下载的序号，例如：--pick 1,3",
+        "cli_search_empty": "没有找到匹配的文献",
+        "cli_search_pick_none": "--pick 没有选中任何有效序号",
+        "cli_search_failed": "检索失败: {e}",
+        "cli_pick_selected": "已选中 {n} 条（序号 {picks}），开始处理",
         "cli_file_missing": "文件不存在: {path}",
         "cli_no_doi": "未找到任何 DOI",
         "cli_preview_header": "预览（共 {n} 篇，命名方式: {naming}）",
@@ -249,6 +320,45 @@ _STR: dict[str, dict[str, str]] = {
         "msg_download_fail": "Download connection failed",
         "msg_download_error": "Download failed",
         "msg_saved": "Done {kb} KB",
+        # 检索（搜索论文页）
+        "tab_tasks": "Tasks",
+        "tab_search": "Search papers",
+        "search_label": "Title / keywords:",
+        "search_button": "Search",
+        "search_years": "Year:",
+        "search_sort": "Sort:",
+        "sort_relevance": "Relevance",
+        "sort_published": "Newest",
+        "search_rows": "Rows:",
+        "col_sel": "Pick",
+        "col_author": "Author",
+        "col_year": "Year",
+        "col_journal": "Journal",
+        "col_avail": "Sci-Hub",
+        "col_note": "Note",
+        "select_all": "Select available",
+        "select_none": "Clear selection",
+        "add_selected": "Add to task list",
+        "open_doi": "Open DOI",
+        "search_hint": "Double-click a row to open its DOI page in the browser",
+        "search_need_query": "Enter a title or keyword first",
+        "search_searching": "Searching CrossRef…",
+        "search_hits": "{n} results — checking Sci-Hub availability…",
+        "search_done": "Search finished: {n} results",
+        "search_stopped": "Search stopped",
+        "search_empty": "No matching papers found",
+        "search_failed_title": "Search failed",
+        "search_failed": "Search failed: {e}",
+        "search_none_selected": "Tick the papers you want first",
+        "search_added": "Added {added} to the task list ({skipped} duplicates skipped)",
+        "search_note_in_list": "In list",
+        "search_note_no_doi": "No DOI",
+        "search_row_blocked": "Not selectable: {title}",
+        "search_no_doi_open": "This entry has no DOI to open",
+        "avail_unknown": "Unconfirmed",
+        "avail_checking": "Checking…",
+        "avail_available": "Available",
+        "avail_not_found": "Not found",
         "cli_description": "Sci-Hub literature downloader — download PDF by DOI",
         "cli_epilog_examples": "Examples:",
         "cli_epilog_naming": "Naming modes",
@@ -265,6 +375,18 @@ _STR: dict[str, dict[str, str]] = {
         "cli_no_metadata": "Do not query CrossRef for titles",
         "cli_dry_run": "Preview only, do not download",
         "cli_lang": "Interface language (zh / en)",
+        "cli_search": "Search CrossRef by title/keywords (use --pick to choose)",
+        "cli_search_limit": "Number of results (default 20, max 100)",
+        "cli_pick": "Download the given result numbers, e.g. 1,3 or 1-3",
+        "cli_year_from": "Only papers published in this year or later",
+        "cli_year_to": "Only papers published in this year or earlier",
+        "cli_sort": "Result order (default relevance)",
+        "cli_search_header": "Search \"{query}\": {n} candidates",
+        "cli_search_hint": "Pick the numbers to download, e.g. --pick 1,3",
+        "cli_search_empty": "No matching papers found",
+        "cli_search_pick_none": "--pick selected no valid result number",
+        "cli_search_failed": "Search failed: {e}",
+        "cli_pick_selected": "Selected {n} result(s) ({picks}), starting",
         "cli_file_missing": "File not found: {path}",
         "cli_no_doi": "No DOI found",
         "cli_preview_header": "Preview ({n} papers, naming: {naming})",
@@ -306,3 +428,13 @@ def status_label(status: str) -> str:
 def naming_labels() -> dict[str, str]:
     """命名模式 → 当前语言的标签（供 GUI 单选按钮用）。"""
     return {k: tr(key) for k, key in _NAMING_KEYS.items()}
+
+
+def search_sort_labels() -> dict[str, str]:
+    """检索排序 → 当前语言的标签（供 GUI 单选按钮用）。"""
+    return {k: tr(key) for k, key in _SORT_KEYS.items()}
+
+
+def search_avail_label(state: str) -> str:
+    """Sci-Hub 收录状态 → 当前语言的文案；未知状态原样返回。"""
+    return tr(_AVAIL_KEYS.get(state, state))

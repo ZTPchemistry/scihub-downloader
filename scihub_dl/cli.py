@@ -2,7 +2,10 @@
 
 保留原脚本的 ``--doi/--title/--batch/--markdown/--outdir/--dry-run``，
 新增 ``--file/--naming/--template/--concurrency/--plain/--no-metadata``，
-以及 ``--lang`` 切换中英文。
+``--lang`` 切换中英文，以及 ``--search/--pick`` 系列按标题检索。
+
+``--search`` 只负责**列出候选**（带序号），要下载哪些由 ``--pick`` 指定，
+选定后完全复用原来的下载流程——参数、预览、汇总都不变。
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-from .config import load_config, save_config
+from .config import config_dir, load_config, save_config
 from .downloader import BatchEngine
 from .i18n import LANGS, get_lang, set_lang, tr
 from .metadata import MetadataCache
@@ -31,6 +34,14 @@ from .models import (
 )
 from .naming import TEMPLATES
 from .parsers import parse_file
+from .search import (
+    DEFAULT_ROWS,
+    DEFAULT_SORT,
+    SORTS,
+    SearchError,
+    SearchService,
+    parse_pick,
+)
 
 _EMOJI = {
     STATUS_SAVED: "✅",
@@ -56,6 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  %(prog)s --file dois.txt --outdir ./papers\n"
             "  %(prog)s --file refs.md --naming author --outdir ./papers\n"
             "  %(prog)s --batch batch.json --dry-run\n"
+            "  %(prog)s --search \"WCA perturbation theory\"\n"
+            "  %(prog)s --search \"WCA perturbation theory\" --pick 1 --outdir ./papers\n"
             "\n"
             + tr("cli_epilog_naming") + ": " + ", ".join(TEMPLATES) + ", custom (--template)"
         ),
@@ -65,6 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--batch", type=str, help=tr("cli_batch"))
     src.add_argument("--markdown", type=str, help=tr("cli_markdown"))
     src.add_argument("--file", type=str, help=tr("cli_file"))
+    src.add_argument("--search", type=str, help=tr("cli_search"))
 
     p.add_argument("--title", type=str, default="", help=tr("cli_title"))
     p.add_argument("--outdir", type=str, default="./papers", help=tr("cli_outdir"))
@@ -81,6 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-metadata", action="store_true", help=tr("cli_no_metadata"))
     p.add_argument("--dry-run", action="store_true", help=tr("cli_dry_run"))
     p.add_argument("--lang", type=str, default=None, choices=list(LANGS), help=tr("cli_lang"))
+    # 仅与 --search 有关
+    p.add_argument("--search-limit", type=int, default=None, help=tr("cli_search_limit"))
+    p.add_argument("--pick", type=str, default="", help=tr("cli_pick"))
+    p.add_argument("--year-from", type=str, default="", help=tr("cli_year_from"))
+    p.add_argument("--year-to", type=str, default="", help=tr("cli_year_to"))
+    p.add_argument("--sort", type=str, default=None, choices=list(SORTS), help=tr("cli_sort"))
     return p
 
 
@@ -134,32 +154,63 @@ def _lang_from_argv(argv: list[str] | None) -> str | None:
     return None
 
 
-def main(argv: list[str] | None = None) -> int:
-    # windowed 打包下 stdout 可能是 None，防止 print 抛异常。
-    if sys.stdout is None:
-        sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
-    if sys.stderr is None:
-        sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
-    # Windows 控制台默认 GBK，无法编码 emoji/特殊字符。
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            if sys.platform == "win32" and hasattr(stream, "reconfigure"):
-                stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:  # noqa: BLE001
-            pass
+def _run_search(args, cfg) -> int:
+    """按标题检索：打印候选列表，必要时（--pick）接着走原来的下载流程。
 
-    cfg = load_config()
-    # 先确定语言再构建 parser，这样 --help 文案也能跟随语言。
-    lang = _lang_from_argv(argv) or cfg.lang or "zh"
-    set_lang(lang)
-
-    args = build_parser().parse_args(argv)
-
-    papers = _collect(args)
-    if not papers:
-        print(f"❌ {tr('cli_no_doi')}")
+    这里刻意**不做** Sci-Hub 收录探测——探测是 GUI 的交互提示，
+    命令行里多打一轮请求只会让脚本变慢。
+    """
+    query = (args.search or "").strip()
+    if not query:
+        print(f"❌ {tr('search_need_query')}")
         return 1
 
+    service = SearchService(mailto=cfg.crossref_mailto, mirrors=cfg.mirrors or None)
+    print(f"\n{'=' * 60}")
+    print(f"🔎 {tr('search_searching')}")
+    print(f"{'=' * 60}")
+    try:
+        results = service.search(
+            query,
+            rows=args.search_limit or DEFAULT_ROWS,
+            year_from=args.year_from,
+            year_to=args.year_to,
+            sort=args.sort or DEFAULT_SORT,
+        )
+    except SearchError as e:
+        print(f"❌ {tr('cli_search_failed', e=e)}")
+        return 1
+
+    if not results:
+        print(f"🔍 {tr('cli_search_empty')}")
+        return 1
+
+    print(f"\n{'=' * 60}")
+    print(f"🔎 {tr('cli_search_header', query=query, n=len(results))}")
+    print(f"{'=' * 60}")
+    for i, r in enumerate(results, 1):
+        bits = " | ".join(b for b in (r.author, r.year, r.journal) if b)
+        print(f"  {i:>3}. {r.title or '—'}")
+        print(f"       {r.doi or '—'}" + (f"  · {bits}" if bits else ""))
+
+    picks = parse_pick(args.pick, len(results))
+    if not picks:
+        if args.pick:
+            print(f"\n❌ {tr('cli_search_pick_none')}")
+            return 1
+        print(f"\n💡 {tr('cli_search_hint')}")
+        print(f"{'=' * 60}\n")
+        return 0
+
+    picked = ",".join(str(n) for n in picks)
+    papers = [results[n - 1].to_paper() for n in picks]
+    print(f"\n✅ {tr('cli_pick_selected', n=len(papers), picks=picked)}")
+    print(f"{'=' * 60}")
+    return _run_download(args, cfg, papers)
+
+
+def _run_download(args, cfg, papers: list[Paper]) -> int:
+    """所有来源（DOI / 文件 / 检索选择）最终都汇到这里。"""
     naming = args.naming or cfg.naming_mode or "title"
     concurrency = args.concurrency or cfg.concurrency
 
@@ -175,9 +226,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {i:>3}. [{p.doi}] -> {sanitize_filename(stem)}.pdf")
         print(f"{'=' * 60}\n")
         return 0
-
-    cache_path = None
-    from .config import config_dir
 
     cache_path = config_dir() / "metadata_cache.json"
     engine = BatchEngine(
@@ -206,6 +254,39 @@ def main(argv: list[str] | None = None) -> int:
     save_config(cfg)
 
     return 0 if summary.failed == 0 and not summary.cancelled else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    # windowed 打包下 stdout 可能是 None，防止 print 抛异常。
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    # Windows 控制台默认 GBK，无法编码 emoji/特殊字符。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if sys.platform == "win32" and hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            pass
+
+    cfg = load_config()
+    # 先确定语言再构建 parser，这样 --help 文案也能跟随语言。
+    lang = _lang_from_argv(argv) or cfg.lang or "zh"
+    set_lang(lang)
+
+    args = build_parser().parse_args(argv)
+
+    # 检索是另一条入口：先列出候选，选中的再进下载流程。
+    if args.search is not None:
+        return _run_search(args, cfg)
+
+    papers = _collect(args)
+    if not papers:
+        print(f"❌ {tr('cli_no_doi')}")
+        return 1
+
+    return _run_download(args, cfg, papers)
 
 
 if __name__ == "__main__":

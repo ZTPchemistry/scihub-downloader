@@ -8,6 +8,10 @@ from tkinter import font as tkfont
 from tkinter import ttk
 
 from ..models import (
+    AVAIL_AVAILABLE,
+    AVAIL_CHECKING,
+    AVAIL_NOT_FOUND,
+    AVAIL_UNKNOWN,
     STATUS_BAD_PDF,
     STATUS_CANCELLED,
     STATUS_CAPTCHA,
@@ -30,6 +34,7 @@ __all__ = [
     "apply_style",
     "STATUS_COLORS",
     "STATUS_LABELS",
+    "AVAIL_COLORS",
 ]
 
 # 状态 → 前景色（clam 主题下 tag 前景色生效）。
@@ -66,6 +71,17 @@ STATUS_LABELS: dict[str, str] = {
     STATUS_NO_PDF: "无 PDF 链接",
     STATUS_BAD_PDF: "内容异常",
     STATUS_CANCELLED: "已取消",
+}
+
+# 检索结果行的配色。前四项是收录状态，后两项是「不可选」的原因，
+# 同一行只挂一个 tag（Tk 的 tag 叠加优先级不好把握），因此这里互斥。
+AVAIL_COLORS: dict[str, str] = {
+    AVAIL_UNKNOWN: "#57606a",
+    AVAIL_CHECKING: "#8250df",
+    AVAIL_AVAILABLE: "#1a7f37",
+    AVAIL_NOT_FOUND: "#9a6700",
+    "no_doi": "#cf222e",
+    "in_list": "#6e7781",
 }
 
 _CJK_CANDIDATES = (
